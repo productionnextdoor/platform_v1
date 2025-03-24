@@ -1,0 +1,26 @@
+<pm-card
+    class="value-chain-card"
+    [hasHeader]="true"
+    [contentPadding]="false"
+    [title]="index + '.' + valueChainCardLocalisation.requestValueChain "
+    [badgeText]="status !== 'selected' ? badgeText: ''"
+    [badgeNegative]="status == 'rejected' || status == 'canceled'"
+>
+
+    <ng-container header>
+        <div class="value-chain-card__date">
+            <span class="value-chain-card__date-text">{{ valueChainCardLocalisation.requestDate }}: </span>
+            <span class="value-chain-card__date-value">{{ requestDate }}</span>
+        </div>
+    </ng-container>
+
+    <div class="value-chain-card__description">
+        {{ valueChainCardLocalisation.description }}
+    </div>
+    <pm-table
+        [loading]="loading"
+        [columnHeaders]="columnHeaders"
+        [(rows)]="rowData"
+        (onActionClicked)="onActionClicked.emit($event)"
+    ></pm-table>
+</pm-card>

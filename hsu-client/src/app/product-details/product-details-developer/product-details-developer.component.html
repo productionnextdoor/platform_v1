@@ -1,0 +1,23 @@
+<pm-header
+    [breadcrumbs]="getBreadcrumbs()"
+/>
+
+<pm-row>
+    <pm-product-details-developer
+        [localisations]="localisations"
+        [productImagePath]="previewImagePath"
+        [productImagePathFull]="previewImagePathFull"
+        [generalInformation]="generalInformation"
+        [productDataDetailCard]="productDataDetailCard"
+        [productDetailsBaseData]="productDetailsBaseData"
+        [fileData]="fileData"
+        [uploadCategories]="uploadCategories"
+        (onDownload)="onDownloadFiles.emit()"
+        (onClickLink)="onOpenLink.emit()"
+    />
+
+    <pm-developer-revenue-card
+        [localisations]="developerRevenueCardLocalisations"
+        [revenueData]="developerRevenueInfo"
+    />
+</pm-row>

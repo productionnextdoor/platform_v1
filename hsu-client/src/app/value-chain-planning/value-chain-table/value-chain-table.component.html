@@ -1,0 +1,14 @@
+<pm-value-chain-table
+    [loading]="loading"
+    [noShadow] ="true"
+    [lastCalculationDate]="lastCalculationDate"
+    [columnHeaders]="valueChainsColumnHeaders"
+    [rowData]="valueChainsRowData"
+    [totalItems]="totalItemsValueChains"
+    [itemsPerPageOptions]="itemsPerPageOptions"
+    [editDisabled]="editDisabled"
+    [localisations]="localisations"
+    (onSortingClicked)="onValueChainSortingClicked($event)"
+    (onPageClicked)="onValueChainPageClicked($event)"
+    (onToggleValueChainsActive)="onSetActive($event)"
+></pm-value-chain-table>

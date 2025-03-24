@@ -1,0 +1,11 @@
+<div class="action-container"
+     [ngClass]="{'action-container--disabled': disabled}">
+    <pm-icon
+        class="action-container__button"
+        *ngFor="let action of actions"
+        [size]=IconSize.S
+        [rotate]=0
+        [icon]="action.icon"
+        (click)="clickEntry(action)"
+    ></pm-icon>
+</div>
