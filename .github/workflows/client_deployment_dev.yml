@@ -4,6 +4,7 @@ on:
     paths:
       - 'hsu-client/**'
       - 'hsu-library/**'
+      - '.github/workflows/client_deployment_dev.yml'
     branches:
       - 'development'
       - 'stage'
@@ -23,6 +24,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     environment:
       name: ${{ startsWith(github.ref, 'refs/heads/development') && 'development' || startsWith(github.ref, 'refs/heads/stage') && 'stage' || startsWith(github.ref, 'refs/heads/master') && 'master' || 'unknown' }}
     steps:
@@ -31,16 +35,7 @@ jobs:
       run: |
         BRANCH_NAME=${GITHUB_REF##*/}
         echo "BRANCH_NAME=${BRANCH_NAME}" >> $GITHUB_ENV
-    - name: Notifying on start
-      uses: pmagentur/pm_slack_notifier@v0.2
-      env:
-        SLACK_CHANNEL: proj-hsu-platform-build
-        SLACK_COLOR: '#FFA500'
-        SLACK_ICON: https://avatars1.githubusercontent.com/u/63812035?s=200&v=4
-        SLACK_MESSAGE: 'Deployment to ${{ env.ProjectName }} Client  ${{ env.BRANCH_NAME }} is started'
-        SLACK_TITLE: 'Deployment to ${{ env.ProjectName }} Client ${{ env.BRANCH_NAME }}'
-        SLACK_USERNAME: "PM's whisperer"
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
     - uses: actions/checkout@v1
     - name: Installing NodeJS
       uses: actions/setup-node@v1
@@ -51,17 +46,25 @@ jobs:
         npm install -g @angular/cli@13.3.6
         ng version
 
-    - name: build from script
+    - name: Set build environment
       env:
-        Docker_registry: ${{ vars.DOCKER_REGISTRY  }}
-        Docker_login: ${{ secrets.DOCKER_USER }}
-        Docker_pass: ${{ secrets.DOCKER_PASS }}
         BRANCH_NAME: ${{ env.BRANCH_NAME }}
       run: |
-        if [ ${BRANCH_NAME} = "master" ]; then ENV='production'; fi
-        if [ ${BRANCH_NAME} = "stage" ]; then ENV='stage'; fi
-        if [ ${BRANCH_NAME} = "development" ]; then ENV='dev'; fi
-        echo ${ENV}
+        if [ ${BRANCH_NAME} = "master" ]; then 
+          echo "ENV=production" >> $GITHUB_ENV
+        elif [ ${BRANCH_NAME} = "stage" ]; then 
+          echo "ENV=stage" >> $GITHUB_ENV
+        elif [ ${BRANCH_NAME} = "development" ]; then 
+          echo "ENV=dev" >> $GITHUB_ENV
+        else
+          echo "ENV=unknown" >> $GITHUB_ENV
+        fi
+        echo "Set ENV to be used in next steps"
+        
+    - name: Build client application
+      env:
+        ENV: ${{ env.ENV }}
+      run: |
 
         export NODE_OPTIONS="--max_old_space_size=4096"
         echo ${NODE_OPTIONS}
@@ -82,40 +85,20 @@ jobs:
         mv dist/hsu-client/* ng/
         cd ng
 
-        docker login -u ${Docker_login} -p ${Docker_pass} ${Docker_registry}
-        docker build -t ${Docker_registry}/${{ env.ProjectName }}-client:${ENV} .
-        docker push ${Docker_registry}/${{ env.ProjectName }}-client:${ENV}
-        
-        docker tag ${Docker_registry}/${{ env.ProjectName }}-client:${ENV} ${Docker_registry}/${{ env.ProjectName }}-client:${BACKUP_TAG}
-        docker push ${Docker_registry}/${{ env.ProjectName }}-client:${BACKUP_TAG}
-  failure:
-    needs: [build]
-    if: failure()
-    runs-on: ubuntu-latest
-    steps:
-    - name: Notifying on error
-      uses: pmagentur/pm_slack_notifier@v0.2
-      env:
-        SLACK_CHANNEL: proj-hsu-platform-build
-        SLACK_COLOR: '#FF0000'
-        SLACK_ICON: https://avatars1.githubusercontent.com/u/63812035?s=200&v=4
-        SLACK_MESSAGE: '${{ env.ProjectName }} Client ${{ env.BRANCH_NAME }} failed :x:'
-        SLACK_TITLE: 'Deployment to ${{ env.ProjectName }} Client ${{ env.BRANCH_NAME }}'
-        SLACK_USERNAME: "PM's whisperer"
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+    - name: Log in to GitHub Container Registry
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-  successed:
-    needs: [build]
-    if: success()
-    runs-on: ubuntu-latest
-    steps:
-    - name: Notifying on success
-      uses: pmagentur/pm_slack_notifier@v0.2
+    - name: Build Docker image
       env:
-        SLACK_CHANNEL: proj-hsu-platform-build
-        SLACK_COLOR: '#006400'
-        SLACK_ICON: https://avatars1.githubusercontent.com/u/63812035?s=200&v=4
-        SLACK_MESSAGE: 'Successfully deployed ${{ env.ProjectName }} Client ${{ env.BRANCH_NAME }} :white_check_mark:'
-        SLACK_TITLE: 'Deployment to ${{ env.ProjectName }} Client ${{ env.BRANCH_NAME }}'
-        SLACK_USERNAME: "PM's whisperer"
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        ENV: ${{ env.ENV }}
+        BACKUP_TAG: ${{ env.BACKUP_TAG }}
+      run: docker build -t ghcr.io/${{ github.repository_owner }}/hsu-platform-client:${ENV} -t ghcr.io/${{ github.repository_owner }}/hsu-platform-client:${ENV}-${BACKUP_TAG} .
+      working-directory: hsu-client/ng
+        
+    - name: Push Docker images
+      env:
+        ENV: ${{ env.ENV }}
+        BACKUP_TAG: ${{ env.BACKUP_TAG }}
+      run: |
+        docker push ghcr.io/${{ github.repository_owner }}/hsu-platform-client:${ENV}
+        docker push ghcr.io/${{ github.repository_owner }}/hsu-platform-client:${ENV}-${BACKUP_TAG}

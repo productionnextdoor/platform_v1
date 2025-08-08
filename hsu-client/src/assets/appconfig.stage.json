@@ -1,6 +1,6 @@
 {
-  "remoteServiceBaseUrl": "https://hsu-platform-stage-backend.pm-projects.de",
-  "appBaseUrl": "https://hsu-platform-stage-client.pm-projects.de",
+  "remoteServiceBaseUrl": "https://platform-api.fabcity.productionnextdoor.de",
+  "appBaseUrl": "https://platform.fabcity.productionnextdoor.de",
   "localeMappings": {
     "angular": [
       {
