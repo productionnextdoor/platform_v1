@@ -29,6 +29,9 @@ env:
 jobs:
   Backend:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     env:
       BACKUP_TAG: ${{ github.event_name != 'workflow_dispatch' &&  github.run_number || github.sha }}
     environment:
