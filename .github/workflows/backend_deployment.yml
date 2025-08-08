@@ -8,6 +8,7 @@ on:
   push:
     paths:
       - 'backend/**'
+      - '.github/workflows/backend_deployment.yml'
     branches:
       - 'development'
       - 'stage'
@@ -74,18 +75,6 @@ jobs:
         echo "CONFIG_FILE: " ${CONFIG_FILE}
         echo "IMAGE_TAG: " ${IMAGE_TAG}
 
-    - name: Notifying on start
-      continue-on-error: true
-      uses: pmagentur/pm_slack_notifier@v0.2
-      env:
-        SLACK_CHANNEL: "proj-${{ env.PROJECT_SHORT_NAME }}-build"
-        SLACK_COLOR: '#FFA500'
-        SLACK_ICON: https://avatars1.githubusercontent.com/u/63812035?s=200&v=4
-        SLACK_MESSAGE: 'Deployment to ${{ env.ASPNET_PROJECT_NAME }} backend  ${{ env.BRANCH_NAME }} is started'
-        SLACK_TITLE: 'Deployment to ${{ env.ASPNET_PROJECT_NAME }} backend ${{ env.BRANCH_NAME }}'
-        SLACK_USERNAME: "PM's whisperer"
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-
     - uses: actions/checkout@v2
 
     - name: Setup .NET Core
@@ -98,79 +87,49 @@ jobs:
       id: files
       uses: jitterbit/get-changed-files@v1
 
-    - name: Apply migrations
-      continue-on-error: true
-      if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && contains(steps.files.outputs.all, 'EntityFrameworkCore/Migrations')) }}
-      env:
-        CONNECTIONSTRINGS__DEFAULT: ${{ env.CONNECTIONSTRINGS__DEFAULT }}
-        JUMP_SSH_KEY: ${{  secrets.JUMP_SSH_KEY }}
-      run: |
-          if [ $BRANCH_NAME = "master" ]; then
-            mkdir ~/.ssh
-            echo -e "${JUMP_SSH_KEY}" >~/.ssh/id_rsa
-            chmod 600 ~/.ssh/id_rsa
-            ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -L 11433:localhost:1433 -N -f ${{ env.JUMP_SSH_USER }}@${{ env.JUMP_SSH_HOST }}            
-          fi
-          export ConnectionStrings__Default=${CONNECTIONSTRINGS__DEFAULT}
-          cd backend/src/${ASPNET_PROJECT_NAME}.Web.Host
-          cp appsettings.json appsettings_backup.json
-          cp ${CONFIG_FILE} appsettings.json
-          cd ../${ASPNET_PROJECT_NAME}.EntityFrameworkCore/
-          dotnet tool install --global dotnet-ef --version ${SDK_GLOBAL_VERSION}
-          dotnet tool restore
-          ~/.dotnet/tools/dotnet-ef database update
-          cd ../${ASPNET_PROJECT_NAME}.Web.Host
-          cp appsettings_backup.json appsettings.json
+    # - name: Apply migrations
+    #   continue-on-error: true
+    #   if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && contains(steps.files.outputs.all, 'EntityFrameworkCore/Migrations')) }}
+    #   env:
+    #     CONNECTIONSTRINGS__DEFAULT: ${{ env.CONNECTIONSTRINGS__DEFAULT }}
+    #     JUMP_SSH_KEY: ${{  secrets.JUMP_SSH_KEY }}
+    #   run: |
+    #       if [ $BRANCH_NAME = "master" ]; then
+    #         mkdir ~/.ssh
+    #         echo -e "${JUMP_SSH_KEY}" >~/.ssh/id_rsa
+    #         chmod 600 ~/.ssh/id_rsa
+    #         ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -L 11433:localhost:1433 -N -f ${{ env.JUMP_SSH_USER }}@${{ env.JUMP_SSH_HOST }}            
+    #       fi
+    #       export ConnectionStrings__Default=${CONNECTIONSTRINGS__DEFAULT}
+    #       cd backend/src/${ASPNET_PROJECT_NAME}.Web.Host
+    #       cp appsettings.json appsettings_backup.json
+    #       cp ${CONFIG_FILE} appsettings.json
+    #       cd ../${ASPNET_PROJECT_NAME}.EntityFrameworkCore/
+    #       dotnet tool install --global dotnet-ef --version ${SDK_GLOBAL_VERSION}
+    #       dotnet tool restore
+    #       ~/.dotnet/tools/dotnet-ef database update
+    #       cd ../${ASPNET_PROJECT_NAME}.Web.Host
+    #       cp appsettings_backup.json appsettings.json
 
     - name: Build Backend
       run: |
         dotnet --version
         echo ${BACKUP_TAG}
         cd backend
-        echo ${DOCKER_USER}
-        echo ${DOCKER_REGISTRY}
-        docker login -u ${DOCKER_USER} -p ${DOCKER_PASS} ${DOCKER_REGISTRY}
         cd src/${ASPNET_PROJECT_NAME}.Web.Host
         dotnet publish --output ./outputs --configuration Debug
         cp ./outputs/Dockerfile ../../
         cd ../../
+        
+    - name: Log in to GitHub Container Registry
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-        docker build -t ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG} .
-        docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG}
+    - name: Build Docker image
+      run: docker build -f ./Dockerfile -t ghcr.io/${{ github.repository_owner }}/hsu-platform-backend:${IMAGE_TAG} -t ghcr.io/${{ github.repository_owner }}/hsu-platform-backend:${BACKUP_TAG} .
+      working-directory: backend
 
-        docker tag ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${BACKUP_TAG}
-        docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${BACKUP_TAG}
+    - name: Push Docker images
+      run: |
+        docker push ghcr.io/${{ github.repository_owner }}/hsu-platform-backend:${IMAGE_TAG}
+        docker push ghcr.io/${{ github.repository_owner }}/hsu-platform-backend:${IMAGE_TAG}-${BACKUP_TAG}
 
-  failure:
-    needs: [Backend]
-    if: failure()
-    runs-on: ubuntu-latest
-    steps:
-    - name: Notifying on error
-      continue-on-error: true
-      uses: pmagentur/pm_slack_notifier@v0.2
-      env:
-        SLACK_CHANNEL: "proj-${{ env.PROJECT_SHORT_NAME }}-build"
-        SLACK_COLOR: '#FF0000'
-        SLACK_ICON: https://avatars1.githubusercontent.com/u/63812035?s=200&v=4
-        SLACK_MESSAGE: '${{ env.ASPNET_PROJECT_NAME }} backend Dev failed :x:'
-        SLACK_TITLE: 'Deployment to ${{ env.ASPNET_PROJECT_NAME }} backend DEV'
-        SLACK_USERNAME: "PM's whisperer"
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-
-  successed:
-    needs: [Backend]
-    if: success()
-    runs-on: ubuntu-latest
-    steps:
-    - name: Notifying on success
-      continue-on-error: true
-      uses: pmagentur/pm_slack_notifier@v0.2
-      env:
-        SLACK_CHANNEL: "proj-${{ env.PROJECT_SHORT_NAME }}-build"
-        SLACK_COLOR: '#006400'
-        SLACK_ICON: https://avatars1.githubusercontent.com/u/63812035?s=200&v=4
-        SLACK_MESSAGE: 'Successfully deployed ${{ env.ASPNET_PROJECT_NAME }} backend Dev :white_check_mark:'
-        SLACK_TITLE: 'Deployment to ${{ env.ASPNET_PROJECT_NAME }} backend DEV'
-        SLACK_USERNAME: "PM's whisperer"
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
