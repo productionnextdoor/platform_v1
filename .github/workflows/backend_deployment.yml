@@ -82,10 +82,10 @@ jobs:
       with:
         dotnet-version: ${{ env.SDK_VERSION }}
 
-    - name: Check if migration should be applied
-      if: ${{ github.event_name != 'workflow_dispatch' }}
-      id: files
-      uses: jitterbit/get-changed-files@v1
+    # - name: Check if migration should be applied
+    #   if: ${{ github.event_name != 'workflow_dispatch' }}
+    #   id: files
+    #   uses: jitterbit/get-changed-files@v1
 
     # - name: Apply migrations
     #   continue-on-error: true
